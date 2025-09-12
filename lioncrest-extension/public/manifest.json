@@ -1,0 +1,18 @@
+{
+    "manifest_version": 3,
+    "version": "1.0.0",
+    "name": "Lioncrest Agent",
+    "action": {
+        "default_popup": "index.html",
+        "default_icon": {
+            "128": "icons/lioncrest_ventures_logo.png"
+        }
+    },
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "host_permissions": [
+        "http://localhost:8000/*"
+    ]
+}

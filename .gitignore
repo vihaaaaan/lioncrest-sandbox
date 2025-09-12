@@ -1,0 +1,192 @@
+# =========================
+# Top-level: Environment
+# =========================
+.env
+.env.local
+.env.*.local
+*.env
+*.env.*
+
+
+# =========================
+# Python (FastAPI server)
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Builds / packaging
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Tests / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.pyre/
+.pytype/
+.mypy_cache/
+.pyright/
+.pyre_configuration.local
+
+# Virtual environments (uv/venv/pyenv)
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+__pypackages__/
+
+
+# =========================
+# Node / React (Chrome extension app)
+# =========================
+
+# Dependencies
+node_modules/
+.pnp.*
+.pnpm-debug.log*
+
+# Build outputs (CRA, Vite, Next, Storybook, etc.)
+build/
+dist/
+out/
+storybook-static/
+.next/
+.nuxt/
+.dist/
+dist-ssr/
+.nyc_output/
+.eslintcache
+.parcel-cache/
+.cache/
+.vite/
+
+# Test / coverage / e2e
+coverage/
+jest-coverage/
+cypress/videos/
+cypress/screenshots/
+playwright-report/
+test-results/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Yarn (Berry) state (keep .yarn releases/plugins if you use Berry; adjust as needed)
+.yarn/install-state.gz
+
+# Misc tools
+.ds_store
+*.map
+
+
+# =========================
+# Chrome Extension specific
+# =========================
+# Packed artifacts and keys
+*.crx
+*.pem
+*.pub
+*.zip
+*.xpi
+web-ext-artifacts/
+
+# Local dev artifacts
+# (adjust if your bundler emits to a custom folder)
+extension-dist/
+extension-build/
+
+
+# =========================
+# IDEs / Editors
+# =========================
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+# JetBrains
+*.ipr
+*.iws
+out/
+
+# Other editors
+.fleet/
+.history/
+
+
+# =========================
+# OS files
+# =========================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+ehthumbs.db
+Thumbs.db
+
+# Linux
+*~
+
+
+# =========================
+# Containers / local tooling
+# =========================
+# (Keep your Dockerfiles; ignore local overrides)
+docker-compose.override.yml
+*.local.yml
+
+
+# =========================
+# Optional: secrets / certs
+# =========================
+*.key
