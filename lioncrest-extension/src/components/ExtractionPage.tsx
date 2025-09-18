@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SchemaType, SchemaTypeLabels } from '../types';
 import type { DataExtractionRequest } from '../types';
 import { apiService } from '../api';
-import lioncrestLogo from '../assets/lioncrest_logo_white.png';
+import { useGmailContext } from "../extension/useGmailContext";
+
 
 export default function ExtractionPage() {
   const [inputText, setInputText] = useState('');
@@ -11,6 +12,12 @@ export default function ExtractionPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { threadId, accountIndex } = useGmailContext();
+
+  useEffect(() => {
+    console.log("[panel] ctx", { threadId, accountIndex });
+  }, [threadId, accountIndex]);
+
 
   const handleExtractData = async () => {
     if (!inputText.trim()) {
@@ -51,10 +58,13 @@ export default function ExtractionPage() {
 
   return (
     <div className="app-container">
-      <div className="header">
-        <img src={lioncrestLogo} className="logo" alt="Lioncrest logo" />
-      </div>
-      
+          <div className="p-4 space-y-2">
+      <div className="font-medium">Gmail thread detection</div>
+      <div className="text-sm">Account: /u/{accountIndex}</div>
+      <div className="text-sm">Thread: {threadId ?? "None"}</div>
+      {!threadId && <div className="text-xs opacity-70">Open a Gmail thread to see data.</div>}
+    </div>
+    
       <div className="card">
         <div className="input-section">
           <div className="schema-selector">

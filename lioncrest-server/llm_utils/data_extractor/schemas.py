@@ -62,7 +62,11 @@ class LPMainDashboard(BaseModel):
     amount: Optional[str] = Field(None, alias="Amount $")
     email: Optional[str] = Field(None, alias="Email")
     notes: Optional[str] = Field(None, alias="Notes")
-    status: Optional[str] = Field(None, alias="Status") # Need to understand logic behind enumeration for this--what does each field mean??
+    status: Optional[str] = Field(None, alias="Status") # Need to understand logic behind enumeration for this--what does each field mean?? (comitted, pending = verbally comitted, Tier 1A bottom of funnel, Tier 1B spend more time, Tier 2 means not had a full contact but giving less of a priority relevant, 
+    # close 2 is week 2 of oct 
+    # 3rd close means Im trying to get to to them after the next close 
+    # When an LP is busy - 2nd close (timing more than appittl) 
+    # Tier 2 - 
     fund: Optional[str] = Field(None, alias="Fund")
     sent_email: Optional[str] = Field(None, alias="Sent Email?")
     follow_up_date: Optional[str] = Field(None, alias="Follow Up date") # additional logic outside of capture?
