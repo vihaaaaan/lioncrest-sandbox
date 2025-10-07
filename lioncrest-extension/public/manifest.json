@@ -3,20 +3,8 @@
   "name": "Lioncrest Agent",
   "version": "1.0.0",
 
-  "permissions": [
-    "sidePanel",
-    "activeTab",
-    "storage",
-    "identity",
-    "tabs",
-    "webNavigation"
-  ],
-
-  "host_permissions": [
-    "https://mail.google.com/*",
-    "https://www.googleapis.com/*",
-    "http://localhost:8000/*"
-  ],
+  "permissions": ["sidePanel","activeTab","storage","identity","tabs","webNavigation"],
+  "host_permissions": ["https://mail.google.com/*","https://www.googleapis.com/*","http://localhost:8000/*"],
 
   "side_panel": {
     "default_path": "index.html"

@@ -20,122 +20,87 @@ export interface DataExtractionRequest {
   schema_type: SchemaType;
 }
 
-export interface DataExtractionResponse {
-  extracted_data: Record<string, any>;
-  schema_type: SchemaType;
-  success: boolean;
-  message?: string;
-}
+// Discriminated union, so TS knows the exact payload shape by schema_type
+export type DataExtractionResponse =
+  | { schema_type: typeof SchemaType.NETWORK;        extracted_data: NetworkPayload;        success: boolean; message?: string }
+  | { schema_type: typeof SchemaType.DEAL_FLOW;      extracted_data: DealFlowPayload;      success: boolean; message?: string }
+  | { schema_type: typeof SchemaType.LP_MAIN_DASHBOARD; extracted_data: LPMainDashboardPayload; success: boolean; message?: string }
+  | { schema_type: typeof SchemaType.VC_FUND;        extracted_data: VCFundPayload;        success: boolean; message?: string };
 
-// Network schema types
-export interface Contact {
-  name?: string;
-  title?: string;
-  company?: string;
-  email?: string;
-  phone?: string;
-  linkedin?: string;
-}
+// --- Basic structures mirroring Pydantic alias keys exactly ---
+// Keep everything optional (server may omit fields). Types are strings for now (basic).
 
-export interface Organization {
-  name?: string;
-  type?: string;
-  industry?: string;
-  description?: string;
-  website?: string;
-}
-
-export interface Relationship {
-  from_entity?: string;
-  to_entity?: string;
-  relationship_type?: string;
-  description?: string;
-}
-
-export interface NetworkData {
-  contacts?: Contact[];
-  organizations?: Organization[];
-  relationships?: Relationship[];
-}
-
-// Deal Flow schema types
-export interface Founder {
-  name?: string;
-  role?: string;
-  background?: string;
-}
-
-export interface KeyMetrics {
-  revenue?: string;
-  growth_rate?: string;
-  users?: string;
-}
-
-export interface DealFlowData {
-  company_name?: string;
-  industry?: string;
-  stage?: string;
-  funding_amount?: string;
-  valuation?: string;
-  investors?: string[];
-  founders?: Founder[];
-  business_model?: string;
-  market_size?: string;
-  competitive_advantage?: string;
-  key_metrics?: KeyMetrics;
-}
-
-// LP Main Dashboard schema types
-export interface LPMainDashboardData {
-  Name?: string;
-  "LP Connection"?: string[];
+export interface LPMainDashboardPayload {
+  "Name"?: string;
   "Amount $"?: string;
-  Email?: string;
-  Notes?: string;
-  Status?: string;
-  Fund?: string;
-  "sent email?"?: string;
+  "Email"?: string;
+  "Notes"?: string;
+  "Status"?: string;
+  "Fund"?: string;
+  "Sent Email?"?: string;
   "Follow Up date"?: string;
   "Upcoming Meeting"?: string;
   "Last Reach Out"?: string;
-  Country?: string;
-  State?: string;
-  City?: string;
+  "Country"?: string;
+  "State"?: string; // could be a stricter USStateName union later
+  "City"?: string;
 }
 
-// VC Fund schema types
-export interface PortfolioCompany {
-  company_name?: string;
-  investment_date?: string;
-  investment_amount?: string;
-  current_status?: string;
-  sector?: string;
+export interface DealFlowPayload {
+  "Company name"?: string;
+  "CEO/ Primary Contact"?: string;
+  "Email"?: string;
+  "Date Sourced"?: string;
+  "Revenue Run Rate"?: string; // keep string for now; can switch to number later
+  "Financing Round"?: string;
+  "Evaluation"?: string;
+  "State"?: string;
+  "City"?: string;
+  "Referral Source"?: string;
+  "Name of Referral"?: string;
+  "Sourced By"?: string;
+  "DEI"?: string;
+  "Equity/ Debt"?: string;
+  "Notes"?: string;
+  "Files"?: string;
 }
 
-export interface FundPerformance {
-  total_invested?: string;
-  current_value?: string;
-  realized_returns?: string;
-  irr?: string;
-  multiple?: string;
+export interface VCFundPayload {
+  "Name"?: string;
+  "Stage"?: string;
+  "Date"?: string;
+  "Name of Contact"?: string;
+  "Title"?: string;
+  "Email"?: string;
+  "Phone"?: string;
+  "Country"?: string;
+  "State"?: string;
+  "Industry Focus"?: string;
+  "Check Size"?: string;
+  "LinkedIn"?: string;
+  "Notes"?: string;
 }
 
-export interface FundManager {
-  name?: string;
-  role?: string;
-  experience?: string;
+export interface NetworkPayload {
+  "Name"?: string;
+  "LinkedIn"?: string;
+  "Email"?: string;
+  "Phone"?: string;
+  "Company"?: string;
+  "Title"?: string;
+  "Status"?: string;
+  "Country"?: string;
+  "State"?: string;
+  "City"?: string;
+  "Notes"?: string;
+  "Date"?: string;
+  "Date (Last Met)"?: string;
+  "Date (Last Contact)"?: string;
 }
 
-export interface VCFundData {
-  fund_name?: string;
-  fund_size?: string;
-  vintage_year?: string;
-  investment_focus?: string;
-  geographic_focus?: string;
-  stage_focus?: string;
-  portfolio_companies?: PortfolioCompany[];
-  fund_performance?: FundPerformance;
-  fund_managers?: FundManager[];
-}
-
-export type ExtractedData = NetworkData | DealFlowData | LPMainDashboardData | VCFundData;
+// A convenient alias for editor components
+export type ExtractedData =
+  | LPMainDashboardPayload
+  | DealFlowPayload
+  | VCFundPayload
+  | NetworkPayload;

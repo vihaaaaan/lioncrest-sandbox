@@ -1,7 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SchemaType } from '../types';
-import type { ExtractedData, NetworkData, DealFlowData, LPMainDashboardData, VCFundData } from '../types';
+import type {
+  ExtractedData,
+  NetworkPayload,
+  DealFlowPayload,
+  LPMainDashboardPayload,
+  VCFundPayload,
+} from '../types';
+import { ExclamationTriangleIcon } from '@heroicons/react/16/solid';
 
 interface LocationState {
   extractedData: ExtractedData;
@@ -9,14 +16,18 @@ interface LocationState {
   originalText: string;
 }
 
+const PRIMARY = '#031F53';
+const fmtKey = (s: string) => s.toUpperCase(); // aliases already provide spacing/case
+const isMultilineKey = (k: string) => /notes?|description|summary|context|message|files?/i.test(k);
+
 export default function ResultsPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const state = location.state as LocationState | undefined;
+
   const [isLoading, setIsLoading] = useState(false);
   const [editedData, setEditedData] = useState<ExtractedData>({});
   const [error, setError] = useState('');
-
-  const state = location.state as LocationState;
 
   useEffect(() => {
     if (!state?.extractedData) {
@@ -26,275 +37,175 @@ export default function ResultsPage() {
     setEditedData(state.extractedData);
   }, [state, navigate]);
 
-  const handleDataChange = (key: string, value: any) => {
-    setEditedData(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  };
-
-  const handleArrayItemChange = (arrayKey: string, index: number, itemKey: string, value: any) => {
-    setEditedData(prev => {
-      const array = (prev as any)[arrayKey] || [];
-      const newArray = [...array];
-      newArray[index] = {
-        ...newArray[index],
-        [itemKey]: value
-      };
-      return {
-        ...prev,
-        [arrayKey]: newArray
-      };
-    });
+  const setField = (key: string, value: string) => {
+    setEditedData(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSendToMonday = async () => {
     setIsLoading(true);
     setError('');
-
     try {
-      // Simulate Monday.com API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Here you would integrate with Monday.com API
+      // TODO: call your Monday API with { schemaType: state!.schemaType, data: editedData }
+      await new Promise(res => setTimeout(res, 800));
+      // eslint-disable-next-line no-console
       console.log('Sending to Monday.com:', {
-        schemaType: state.schemaType,
-        data: editedData
+        schemaType: state!.schemaType,
+        data: editedData,
       });
-
       alert('Data successfully sent to Monday.com!');
       navigate('/');
-    } catch (err) {
+    } catch {
       setError('Failed to send data to Monday.com');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const renderNetworkData = (data: NetworkData) => (
-    <div className="data-section">
-      <h3>Contacts</h3>
-      {data.contacts?.map((contact, index) => (
-        <div key={index} className="data-item">
-          <h4>Contact {index + 1}</h4>
-          {Object.entries(contact).map(([key, value]) => (
-            <div key={key} className="field-group">
-              <label>{key.replace('_', ' ').toUpperCase()}:</label>
-              <input
-                type="text"
-                value={value || ''}
-                onChange={(e) => handleArrayItemChange('contacts', index, key, e.target.value)}
-                className="field-input"
-              />
-            </div>
-          ))}
-        </div>
-      ))}
-
-      <h3>Organizations</h3>
-      {data.organizations?.map((org, index) => (
-        <div key={index} className="data-item">
-          <h4>Organization {index + 1}</h4>
-          {Object.entries(org).map(([key, value]) => (
-            <div key={key} className="field-group">
-              <label>{key.replace('_', ' ').toUpperCase()}:</label>
-              <input
-                type="text"
-                value={value || ''}
-                onChange={(e) => handleArrayItemChange('organizations', index, key, e.target.value)}
-                className="field-input"
-              />
-            </div>
-          ))}
-        </div>
-      ))}
-
-      <h3>Relationships</h3>
-      {data.relationships?.map((rel, index) => (
-        <div key={index} className="data-item">
-          <h4>Relationship {index + 1}</h4>
-          {Object.entries(rel).map(([key, value]) => (
-            <div key={key} className="field-group">
-              <label>{key.replace('_', ' ').toUpperCase()}:</label>
-              <input
-                type="text"
-                value={value || ''}
-                onChange={(e) => handleArrayItemChange('relationships', index, key, e.target.value)}
-                className="field-input"
-              />
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderDealFlowData = (data: DealFlowData) => (
-    <div className="data-section">
-      <h3>Company Information</h3>
-      {Object.entries(data).filter(([key]) => !['investors', 'founders', 'key_metrics'].includes(key)).map(([key, value]) => (
-        <div key={key} className="field-group">
-          <label>{key.replace('_', ' ').toUpperCase()}:</label>
+  const Field = ({
+    label,
+    value,
+    onChange,
+  }: { label: string; value?: string; onChange: (v: string) => void }) => {
+    const multiline = isMultilineKey(label);
+    return (
+      <div className="space-y-1">
+        <label className="block text-[10px] font-semibold tracking-wide text-gray-600">
+          {fmtKey(label)}
+        </label>
+        {multiline ? (
+          <textarea
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            rows={4}
+            className="w-full rounded border border-gray-300 p-2 text-sm text-gray-800 focus:outline-none focus:ring-2"
+            style={{ outlineColor: PRIMARY }}
+          />
+        ) : (
           <input
             type="text"
-            value={value || ''}
-            onChange={(e) => handleDataChange(key, e.target.value)}
-            className="field-input"
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full rounded border border-gray-300 p-2 text-sm text-gray-800 focus:outline-none focus:ring-2"
+            style={{ outlineColor: PRIMARY }}
           />
-        </div>
-      ))}
-
-      <h3>Investors</h3>
-      {data.investors?.map((investor, index) => (
-        <div key={index} className="field-group">
-          <label>Investor {index + 1}:</label>
-          <input
-            type="text"
-            value={investor}
-            onChange={(e) => {
-              const newInvestors = [...(data.investors || [])];
-              newInvestors[index] = e.target.value;
-              handleDataChange('investors', newInvestors);
-            }}
-            className="field-input"
-          />
-        </div>
-      ))}
-
-      <h3>Founders</h3>
-      {data.founders?.map((founder, index) => (
-        <div key={index} className="data-item">
-          <h4>Founder {index + 1}</h4>
-          {Object.entries(founder).map(([key, value]) => (
-            <div key={key} className="field-group">
-              <label>{key.replace('_', ' ').toUpperCase()}:</label>
-              <input
-                type="text"
-                value={value || ''}
-                onChange={(e) => handleArrayItemChange('founders', index, key, e.target.value)}
-                className="field-input"
-              />
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderLPDashboardData = (data: LPMainDashboardData) => (
-    <div className="data-section">
-      <h3>LP Dashboard Information</h3>
-      {Object.entries(data).map(([key, value]) => (
-        <div key={key} className="field-group">
-          <label>{key}:</label>
-          {key === 'LP Connection' ? (
-            <input
-              type="text"
-              value={Array.isArray(value) ? value.join(', ') : value || ''}
-              onChange={(e) => handleDataChange(key, e.target.value.split(', ').filter(v => v.trim()))}
-              className="field-input"
-              placeholder="Separate multiple names with commas"
-            />
-          ) : (
-            <input
-              type="text"
-              value={value || ''}
-              onChange={(e) => handleDataChange(key, e.target.value)}
-              className="field-input"
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderVCFundData = (data: VCFundData) => (
-    <div className="data-section">
-      <h3>Fund Information</h3>
-      {Object.entries(data).filter(([key]) => !['portfolio_companies', 'fund_performance', 'fund_managers'].includes(key)).map(([key, value]) => (
-        <div key={key} className="field-group">
-          <label>{key.replace('_', ' ').toUpperCase()}:</label>
-          <input
-            type="text"
-            value={value || ''}
-            onChange={(e) => handleDataChange(key, e.target.value)}
-            className="field-input"
-          />
-        </div>
-      ))}
-
-      <h3>Portfolio Companies</h3>
-      {data.portfolio_companies?.map((company, index) => (
-        <div key={index} className="data-item">
-          <h4>Company {index + 1}</h4>
-          {Object.entries(company).map(([key, value]) => (
-            <div key={key} className="field-group">
-              <label>{key.replace('_', ' ').toUpperCase()}:</label>
-              <input
-                type="text"
-                value={value || ''}
-                onChange={(e) => handleArrayItemChange('portfolio_companies', index, key, e.target.value)}
-                className="field-input"
-              />
-            </div>
-          ))}
-        </div>
-      ))}
-
-      <h3>Fund Performance</h3>
-      {data.fund_performance && Object.entries(data.fund_performance).map(([key, value]) => (
-        <div key={key} className="field-group">
-          <label>{key.replace('_', ' ').toUpperCase()}:</label>
-          <input
-            type="text"
-            value={value || ''}
-            onChange={(e) => handleDataChange('fund_performance', { ...data.fund_performance, [key]: e.target.value })}
-            className="field-input"
-          />
-        </div>
-      ))}
-    </div>
-  );
-
-  if (!state?.extractedData) {
-    return <div>Loading...</div>;
-  }
-
-  return (
-    <div className="app-container">
-      <div className="header">
-        <button onClick={() => navigate('/')} className="back-button">← Back</button>
-        <h1>Review & Edit Data</h1>
-      </div>
-
-      <div className="results-container">
-        <div className="schema-info">
-          <h2>Extracted from: {state.schemaType.replace('_', ' ').toUpperCase()}</h2>
-        </div>
-
-        <div className="data-editor">
-          {state.schemaType === SchemaType.NETWORK && renderNetworkData(editedData as NetworkData)}
-          {state.schemaType === SchemaType.DEAL_FLOW && renderDealFlowData(editedData as DealFlowData)}
-          {state.schemaType === SchemaType.LP_MAIN_DASHBOARD && renderLPDashboardData(editedData as LPMainDashboardData)}
-          {state.schemaType === SchemaType.VC_FUND && renderVCFundData(editedData as VCFundData)}
-        </div>
-
-        <div className="action-buttons">
-          <button
-            onClick={handleSendToMonday}
-            disabled={isLoading}
-            className="monday-button"
-          >
-            {isLoading ? 'Sending to Monday.com...' : 'Send to Monday.com'}
-          </button>
-        </div>
-
-        {error && (
-          <div className="error-message">
-            <strong>Error:</strong> {error}
-          </div>
         )}
       </div>
+    );
+  };
+
+  const SectionCard = ({
+    title,
+    children,
+  }: { title: string; children: React.ReactNode }) => (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <h3 className="mb-3 text-xs font-bold" style={{ color: PRIMARY }}>{title}</h3>
+      <div className="space-y-4">{children}</div>
+    </div>
+  );
+
+  // Field order per schema (unchanged, just memo'd)
+  const ORDER: Partial<Record<SchemaType, string[]>> = useMemo(() => ({
+    [SchemaType.NETWORK]: [
+      'Name','Title','Company','Email','Phone','LinkedIn',
+      'Status','Country','State','City','Date','Date (Last Met)','Date (Last Contact)','Notes'
+    ],
+    [SchemaType.DEAL_FLOW]: [
+      'Company name','CEO/ Primary Contact','Email','Date Sourced','Revenue Run Rate',
+      'Financing Round','Evaluation','State','City','Referral Source','Name of Referral',
+      'Sourced By','DEI','Equity/ Debt','Files','Notes'
+    ],
+    [SchemaType.LP_MAIN_DASHBOARD]: [
+      'Name','Fund','Amount $','Email','Status','Country','State','City',
+      'Follow Up date','Upcoming Meeting','Last Reach Out','Sent Email?','Notes'
+    ],
+    [SchemaType.VC_FUND]: [
+      'Name','Stage','Date','Name of Contact','Title','Email','Phone',
+      'Country','State','Industry Focus','Check Size','LinkedIn','Notes'
+    ],
+  }), []);
+
+  const renderFlatObjectOrdered = (obj: Record<string, any>, order?: string[]) => {
+    const presentKeys = new Set(Object.keys(obj ?? {}));
+    const ordered = (order ?? []).filter(k => presentKeys.has(k));
+    const rest = Array.from(presentKeys).filter(k => !ordered.includes(k)).sort();
+    const finalKeys = [...ordered, ...rest];
+
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        {finalKeys.map((k) => (
+          <Field key={k} label={k} value={obj[k]} onChange={(v) => setField(k, v)} />
+        ))}
+      </div>
+    );
+  };
+
+  if (!state?.extractedData) {
+    return <div className="p-4 text-sm text-gray-600">Loading...</div>;
+  }
+
+  const schemaType = state.schemaType;
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-800 hover:bg-gray-50"
+          >
+            ← Back
+          </button>
+          <h1 className="text-base font-semibold" style={{ color: PRIMARY }}>Review Data</h1>
+        </div>
+      </div>
+
+      {/* Editor */}
+      <div className="space-y-6">
+        {schemaType === SchemaType.NETWORK && (
+          <SectionCard title="Network">
+            {renderFlatObjectOrdered(editedData as NetworkPayload, ORDER[SchemaType.NETWORK])}
+          </SectionCard>
+        )}
+
+        {schemaType === SchemaType.DEAL_FLOW && (
+          <SectionCard title="Deal Flow">
+            {renderFlatObjectOrdered(editedData as DealFlowPayload, ORDER[SchemaType.DEAL_FLOW])}
+          </SectionCard>
+        )}
+
+        {schemaType === SchemaType.LP_MAIN_DASHBOARD && (
+          <SectionCard title="LP Main Dashboard">
+            {renderFlatObjectOrdered(editedData as LPMainDashboardPayload, ORDER[SchemaType.LP_MAIN_DASHBOARD])}
+          </SectionCard>
+        )}
+
+        {schemaType === SchemaType.VC_FUND && (
+          <SectionCard title="VC Fund">
+            {renderFlatObjectOrdered(editedData as VCFundPayload, ORDER[SchemaType.VC_FUND])}
+          </SectionCard>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="mt-3">
+        <button
+          onClick={handleSendToMonday}
+          disabled={isLoading}
+          className="w-full px-3 py-2 rounded text-white text-sm bg-[#031F53] hover:opacity-90 active:opacity-80 disabled:opacity-50"
+          style={{ backgroundColor: PRIMARY }}
+        >
+          {isLoading ? 'Sending to Monday.com…' : 'Send to Monday.com'}
+        </button>
+
+
+      </div>
+        {error && (
+          <p className="w-full mt-3 px-3 py-2 rounded text-white text-xs bg-red-500 disabled:opacity-50 flex items-center justify-center gap-2">
+            <ExclamationTriangleIcon className="h-4 w-4 text-white" />
+          {error}
+          </p>
+        )}
     </div>
   );
 }
