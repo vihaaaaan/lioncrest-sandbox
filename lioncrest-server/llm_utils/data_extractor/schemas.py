@@ -58,23 +58,23 @@ class USStateName(StrEnum):
     Canada = "Canada"
 
 class LPMainDashboard(BaseModel):
-    name: Optional[str] = Field(None, alias="Name")
-    amount: Optional[str] = Field(None, alias="Amount $")
-    email: Optional[str] = Field(None, alias="Email")
-    notes: Optional[str] = Field(None, alias="Notes")
-    status: Optional[str] = Field(None, alias="Status") # Need to understand logic behind enumeration for this--what does each field mean?? (comitted, pending = verbally comitted, Tier 1A bottom of funnel, Tier 1B spend more time, Tier 2 means not had a full contact but giving less of a priority relevant, 
+    name: Optional[str] = Field(None, alias="Name", description="Full name of LP contact")
+    amount: Optional[str] = Field(None, alias="Amount $", description="Provide the full integer amount DO NOT SHORTEN, e.g., 5000 for $5000 rather than 5 or 5k")
+    email: Optional[str] = Field(None, alias="Email", description="Email address of the LP contact")
+    notes: Optional[str] = Field(None, alias="Notes", description="Summarize any key points or action items you deem very neccesary")
+    status: Optional[str] = Field(None, alias="Status", description="Leave this null for now") # Need to understand logic behind enumeration for this--what does each field mean?? (comitted, pending = verbally comitted, Tier 1A bottom of funnel, Tier 1B spend more time, Tier 2 means not had a full contact but giving less of a priority relevant, 
     # close 2 is week 2 of oct 
     # 3rd close means Im trying to get to to them after the next close 
     # When an LP is busy - 2nd close (timing more than appittl) 
     # Tier 2 - 
-    fund: Optional[str] = Field(None, alias="Fund")
-    sent_email: Optional[str] = Field(None, alias="Sent Email?")
-    follow_up_date: Optional[str] = Field(None, alias="Follow Up date") # additional logic outside of capture?
-    upcoming_meeting: Optional[str] = Field(None, alias="Upcoming Meeting")
-    last_reach_out: Optional[str] = Field(None, alias="Last Reach Out")
-    country: Optional[str] = Field(None, alias="Country")
-    state: Optional[USStateName] = Field(None, alias="State")
-    city: Optional[str] = Field(None, alias="City")
+    fund: Optional[str] = Field(None, alias="Fund", description="This is the name of the fund they are investing in, it can be either Lioncrest, Prospeq, or All (which means both)")
+    sent_email: Optional[str] = Field(None, alias="Sent Email?", description="If you have sent them an email, indicate as Sent, else null")
+    follow_up_date: Optional[str] = Field(None, alias="Follow Up date", description="leave null for now")
+    upcoming_meeting: Optional[str] = Field(None, alias="Upcoming Meeting", description="Only provide a specific date if an explicit upcoming meeting is mentioned, else null")
+    last_reach_out: Optional[str] = Field(None, alias="Last Reach Out", description="The date that you last reached out to this person")
+    country: Optional[str] = Field(None, alias="Country", description="Country of the LP contact")
+    state: Optional[USStateName] = Field(None, alias="State", description="State of the LP contact, if a non-US contact, leave null")
+    city: Optional[str] = Field(None, alias="City", description="City of the LP contact")
 
     model_config = {
         "populate_by_name": True

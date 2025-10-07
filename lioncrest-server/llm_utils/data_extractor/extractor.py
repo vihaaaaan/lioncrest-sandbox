@@ -32,8 +32,6 @@ Return ONLY a single JSON object for the schema. No explanation.
 
 Global rules:
 - Use exactly these field names (no extras). Missing/ambiguous -> null.
-- Never invent values; prefer null over guessing.
-- Keep human text as written (trim whitespace); do not summarize.
 - Email: lowercase if clearly an email; else null.
 - LinkedIn: include only full URLs; else null.
 - Phone: prefer E.164 (+<country><area><number>) when unambiguous:
@@ -47,30 +45,21 @@ Global rules:
   * If conflicting/ambiguous, set null.
 """.strip()
 
-# Optional per-schema clarifications/tie-breakers
-_SCHEMA_NOTES: dict[SchemaType, str] = {
-    SchemaType.NETWORK: (
-    ),
-    SchemaType.DEAL_FLOW: (
-        "If multiple revenue numbers are present, choose the one explicitly marked as “run rate (in $k)”; otherwise null."
-    ),
-    SchemaType.LP_MAIN_DASHBOARD: (
-        "“Sent Email?” must be “yes” or “no” only when explicitly stated; otherwise null. "
-        "Status should reflect explicit wording; do not coerce."
-    ),
-    SchemaType.VC_FUND: (
-        "Check Size must keep original currency/range formatting; do not normalize to numbers."
-    ),
-}
-
 def _fields_block(schema_type: SchemaType) -> str:
-    extra = _SCHEMA_NOTES.get(schema_type, "")
-    extra_block = f"\n\nNotes:\n- {extra}" if extra else ""
+    model = _DATA_MODEL_MAP[schema_type]
+    fields_info = []
+    for name, field in model.model_fields.items():
+        desc = field.description or ""
+        alias = field.alias or name
+        fields_info.append(f"- {alias}: {desc if desc else 'no description'}")
+
     return (
-        f"Extract the following fields for the {schema_type.value} schema. "
-        "\n\n"
-        f"{extra_block}\n\n{_COMMON_RULES}"
+        f"Extract the following fields for the {schema_type.value} schema:\n"
+        + "\n".join(fields_info)
+        + "\n\nGlobal rules:\n"
+        + _COMMON_RULES
     )
+
 
 
 def _prompt_for(schema_type: SchemaType, text: str) -> str:
@@ -139,6 +128,6 @@ class DataExtractor:
         except ValidationError as e:
             raise ValueError(f"Extraction did not match schema ({data_model.__name__}): {e}") from e
 
-        alias_dict = validated_obj.model_dump(by_alias=True, exclude_none=True)
+        alias_dict = validated_obj.model_dump(by_alias=True, exclude_none=False)
 
         return validated_obj, alias_dict
