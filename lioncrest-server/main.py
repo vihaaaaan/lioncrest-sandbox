@@ -1,49 +1,56 @@
-import json
+# main.py
 import os
-from enum import Enum
 from typing import Dict, Any, Optional
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 from pydantic import BaseModel
+
 from llm_utils.llm_utils import OpenAIClient
-from llm_utils.data_extractor.schemas import Network, DealFlow, VCFund, LPMainDashboard
-from llm_utils.data_extractor.extractor import SchemaType
-from llm_utils.data_extractor.extractor import DataExtractor
-import logging
+from llm_utils.schemas import network, deal_flow, lp, vc_fund  # noqa: F401 (kept if used elsewhere)
+from llm_utils.data_extractor.extractor import SchemaType, DataExtractor
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+# NEW: centralized logging
+from logging_config import configure_logging, get_logger, with_request_context
 
-logger = logging.getLogger(__name__)
+# ------------------------------------------------------------------------------
+# Configure logging & environment
+# ------------------------------------------------------------------------------
+configure_logging()
+logger = get_logger(__name__)
 
-# Load environment variables
 load_dotenv()
+
+# ------------------------------------------------------------------------------
+# LLM client + extractor
+# ------------------------------------------------------------------------------
 client = OpenAIClient()
 extractor = DataExtractor(client)
 
-# Request model
+# ------------------------------------------------------------------------------
+# Models
+# ------------------------------------------------------------------------------
 class DataExtractionRequest(BaseModel):
     text: str
     schema_type: SchemaType
 
 
-# Response model
 class DataExtractionResponse(BaseModel):
     extracted_data: Dict[str, Any]
     schema_type: SchemaType
     success: bool
     message: Optional[str] = None
 
+
+# ------------------------------------------------------------------------------
+# FastAPI app
+# ------------------------------------------------------------------------------
 app = FastAPI(
     title="Lioncrest Data Extraction API",
     description="API for extracting structured data from text based on different schemas",
-    version="0.1.0"
+    version="0.1.0",
 )
 
 app.add_middleware(
@@ -54,32 +61,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
 @app.get("/")
-async def root():
+async def root(request: Request):
     """Health check endpoint"""
     return {"message": "Lioncrest Data Extraction API is running"}
 
+
 @app.post("/extract-data", response_model=DataExtractionResponse)
-async def extract_data(request: DataExtractionRequest):
+async def extract_data(request: Request, body: DataExtractionRequest):
     """
     Extract structured data from text based on the specified schema type.
-    
-    Args:
-        request: Contains the text to process and the schema type to use
-        
-    Returns:
-        Extracted data in the format specified by the schema type
     """
+    # Build structured context for logging
+    req_extra = with_request_context(
+        request_id=getattr(request.state, "request_id", None),
+        method="POST",
+        path="/extract-data",
+    )
+
+    logger.data("request body", extra={**req_extra, "body": body.model_dump()})
+
+    logger.info("extract-data called", extra=req_extra)
+
     try:
-        parsed_obj, alias_dict = extractor.extract(text=request.text, schema_type=request.schema_type)
+        parsed_obj, alias_dict = extractor.extract(
+            schema_type=body.schema_type,
+            text=body.text,
+            log_extra=req_extra,
+        )
+        logger.data(f"parsed_obj: {parsed_obj}", extra=req_extra)
     except ValueError as e:
+        logger.warning(f"bad request: {e}", extra=req_extra)
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("unexpected error during extraction", extra=req_extra)
+        raise HTTPException(status_code=500, detail="Extraction failed") from e
+
+    logger.info("extraction succeeded", extra=req_extra)
 
     return DataExtractionResponse(
         extracted_data=alias_dict,
-        schema_type=request.schema_type,
+        schema_type=body.schema_type,
         success=True,
-        message="Data extracted successfully"
+        message="Data extracted successfully",
     )
 
 def main():
@@ -87,9 +113,11 @@ def main():
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True
+        port=int(os.getenv("PORT", "8000")),
+        reload=True,
+        log_level=os.getenv("LOG_LEVEL", "info").lower(),
     )
+
 
 if __name__ == "__main__":
     main()
