@@ -5,7 +5,7 @@ import { useGmailContext } from "../extension/useGmailContext";
 import warning_icon from "../assets/warning_icon.svg";
 import SchemaDropdown from "./SchemaDropdown";
 import { apiService } from "../api";
-import type { SchemaType, DataExtractionRequest, DataExtractionResponse } from "../types";
+import type { DataExtractionRequest, DataExtractionResponse } from "../types";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 
 type Mode = "thread" | "manual";
@@ -21,11 +21,13 @@ export default function ExtractionPage() {
   const navigate = useNavigate();
   const { threadId, accountIndex } = useGmailContext();
 
-  const [schema, setSchema] = useState<SchemaType | "">("");
+  const [schema, setSchema] = useState<string>("");
   const [text, setText] = useState("");
   const [mode, setMode] = useState<Mode>(threadId ? "thread" : "manual");
 
-  const [loading, setLoading] = useState(false);
+  const [loadingExtraction, setExtractionLoading] = useState(false);
+  const [loadingClear, setClearLoading] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   // Email preview state
@@ -66,7 +68,7 @@ export default function ExtractionPage() {
 
   const handleExtract = async () => {
     try {
-      setLoading(true);
+      setExtractionLoading(true);
       setError(null);
 
       if (!schema) {
@@ -87,7 +89,7 @@ export default function ExtractionPage() {
       }
 
       const req: DataExtractionRequest = {
-        schema_type: schema as SchemaType,
+        schema_type: schema,
         text: payloadText,
       };
 
@@ -104,13 +106,15 @@ export default function ExtractionPage() {
     } catch (e: any) {
       setError(e.message || "Something went wrong.");
     } finally {
-      setLoading(false);
+      setExtractionLoading(false);
     }
   };
 
   const handleClear = () => {
+    setClearLoading(true);
     setText("");
     setSchema("");
+    setClearLoading(false);
   };
 
   return (
@@ -188,10 +192,10 @@ export default function ExtractionPage() {
           <div className="mt-3">
             <button
               onClick={handleExtract}
-              disabled={loading}
+              disabled={loadingExtraction}
               className="w-full px-3 py-2 rounded text-white text-sm bg-[#031F53] hover:opacity-90 active:opacity-80 disabled:opacity-50"
             >
-              {loading ? "Extracting…" : "Extract from Thread"}
+              {loadingExtraction ? "Extracting…" : "Extract from Thread"}
             </button>
           </div>
 
@@ -248,20 +252,20 @@ export default function ExtractionPage() {
           <div className="flex gap-2">
             <button
               onClick={handleExtract}
-              disabled={loading}
+              disabled={loadingExtraction}
               className="w-full mt-3 px-3 py-2 rounded text-white text-xs bg-[#031F53] hover:opacity-90 active:opacity-80 disabled:opacity-50 flex items-center justify-center gap-2 transition-all duration-300 ease-in-out hover:scale-105 hover:shadow-lg active:scale-95"
             >
-              {loading && (
+              {loadingExtraction && (
                 <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               )}
-              {loading ? "Extracting Data..." : "Extract Data"}
+              {loadingExtraction ? "Extracting Data..." : "Extract Data"}
             </button>
             <button
               onClick={handleClear}
-              disabled={loading}
+              disabled={loadingClear}
               className="w-full mt-3 px-3 py-2 rounded text-white text-xs bg-[#031F53] hover:opacity-90 active:opacity-80 disabled:opacity-50 hover:scale-105 transition-all duration-300 ease-in-out hover:shadow-lg active:scale-95"
             >
-              {loading ? 'Clearing...' : 'Clear'}
+              {loadingClear ? 'Clearing...' : 'Clear'}
             </button>
           </div>
 

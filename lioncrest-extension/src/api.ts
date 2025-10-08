@@ -20,11 +20,27 @@ export const apiService = {
     return response.json();
   },
 
-  async getSchemas() {
-    const response = await fetch(`${API_BASE_URL}/schemas`);
+  async getSchemaNames() {
+    const response = await fetch(`${API_BASE_URL}/schema_names`);
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch schemas: ${response.status}`);
+      throw new Error(`Failed to fetch schema names: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async getSchema(schemaType: string) {
+    const response = await fetch(`${API_BASE_URL}/schema?schema_type=${encodeURIComponent(schemaType)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Failed to fetch schema: ${response.status}`);
     }
 
     return response.json();

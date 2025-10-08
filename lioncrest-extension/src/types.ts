@@ -1,31 +1,29 @@
 // Types for the API
-export const SchemaType = {
-  NETWORK: "network",
-  DEAL_FLOW: "deal_flow",
-  LP_MAIN_DASHBOARD: "lp_main_dashboard",
-  VC_FUND: "vc_fund"
-} as const;
 
-export type SchemaType = typeof SchemaType[keyof typeof SchemaType];
+// Schema info returned from /schema_names endpoint
+export interface SchemaInfo {
+  value: string;
+  display_name: string;
+}
 
-export const SchemaTypeLabels = {
-  [SchemaType.NETWORK]: "Network",
-  [SchemaType.DEAL_FLOW]: "Deal Flow",
-  [SchemaType.LP_MAIN_DASHBOARD]: "LP Main Dashboard",
-  [SchemaType.VC_FUND]: "VC Fund"
+export interface SchemaNameResponse {
+  schemas: SchemaInfo[];
+  count: number;
+  message: string;
 }
 
 export interface DataExtractionRequest {
   text: string;
-  schema_type: SchemaType;
+  schema_type: string;
 }
 
-// Discriminated union, so TS knows the exact payload shape by schema_type
-export type DataExtractionResponse =
-  | { schema_type: typeof SchemaType.NETWORK;        extracted_data: NetworkPayload;        success: boolean; message?: string }
-  | { schema_type: typeof SchemaType.DEAL_FLOW;      extracted_data: DealFlowPayload;      success: boolean; message?: string }
-  | { schema_type: typeof SchemaType.LP_MAIN_DASHBOARD; extracted_data: LPMainDashboardPayload; success: boolean; message?: string }
-  | { schema_type: typeof SchemaType.VC_FUND;        extracted_data: VCFundPayload;        success: boolean; message?: string };
+// Simplified response type - schema_type is now just a string
+export interface DataExtractionResponse {
+  schema_type: string;
+  extracted_data: Record<string, any>;
+  success: boolean;
+  message?: string;
+}
 
 // --- Basic structures mirroring Pydantic alias keys exactly ---
 // Keep everything optional (server may omit fields). Types are strings for now (basic).
@@ -98,9 +96,5 @@ export interface NetworkPayload {
   "Date (Last Contact)"?: string;
 }
 
-// A convenient alias for editor components
-export type ExtractedData =
-  | LPMainDashboardPayload
-  | DealFlowPayload
-  | VCFundPayload
-  | NetworkPayload;
+// A convenient alias for editor components - allow any string key for dynamic schema fields
+export type ExtractedData = Record<string, any>;

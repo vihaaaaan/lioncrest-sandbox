@@ -1,23 +1,31 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { SchemaType } from '../types';
-import type {
-  ExtractedData,
-  NetworkPayload,
-  DealFlowPayload,
-  LPMainDashboardPayload,
-  VCFundPayload,
-} from '../types';
+import { apiService } from '../api';
+import type { ExtractedData } from '../types';
 import { ExclamationTriangleIcon } from '@heroicons/react/16/solid';
 
 interface LocationState {
   extractedData: ExtractedData;
-  schemaType: SchemaType;
+  schemaType: string;
   originalText: string;
 }
 
+interface SchemaField {
+  alias: string;
+  description: string;
+  type: string;
+  required: boolean;
+}
+
+interface SchemaDefinition {
+  schema_type: string;
+  display_name: string;
+  schema: any;
+  fields: Record<string, SchemaField>;
+}
+
 const PRIMARY = '#031F53';
-const fmtKey = (s: string) => s.toUpperCase(); // aliases already provide spacing/case
+const fmtKey = (s: string) => s.toUpperCase();
 const isMultilineKey = (k: string) => /notes?|description|summary|context|message|files?/i.test(k);
 
 export default function ResultsPage() {
@@ -26,8 +34,33 @@ export default function ResultsPage() {
   const state = location.state as LocationState | undefined;
 
   const [isLoading, setIsLoading] = useState(false);
+  const [schemaLoading, setSchemaLoading] = useState(true);
   const [editedData, setEditedData] = useState<ExtractedData>({});
   const [error, setError] = useState('');
+  const [schemaDefinition, setSchemaDefinition] = useState<SchemaDefinition | null>(null);
+
+  // Fetch schema definition on mount
+  useEffect(() => {
+    async function loadSchema() {
+      if (!state?.schemaType) {
+        navigate('/');
+        return;
+      }
+      
+      try {
+        setSchemaLoading(true);
+        const response = await apiService.getSchema(state.schemaType);
+        setSchemaDefinition(response.schema);
+      } catch (err) {
+        console.error('Failed to load schema:', err);
+        setError('Failed to load schema definition');
+      } finally {
+        setSchemaLoading(false);
+      }
+    }
+    
+    loadSchema();
+  }, [state?.schemaType, navigate]);
 
   useEffect(() => {
     if (!state?.extractedData) {
@@ -39,6 +72,16 @@ export default function ResultsPage() {
 
   const setField = (key: string, value: string) => {
     setEditedData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleBack = () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to go back? You will lose all extracted data that has not been sent to Monday.com.'
+    );
+    
+    if (confirmed) {
+      navigate('/');
+    }
   };
 
   const handleSendToMonday = async () => {
@@ -61,20 +104,74 @@ export default function ResultsPage() {
     }
   };
 
+  // Get enum options for a field from the schema definition
+  const getEnumOptions = (fieldAlias: string): string[] | null => {
+    if (!schemaDefinition?.schema?.$defs) return null;
+    
+    // Find the property in the schema
+    const properties = schemaDefinition.schema.properties;
+    const property = properties?.[fieldAlias];
+    
+    if (!property) return null;
+    
+    // Check if it references an enum definition
+    let enumRef: string | null = null;
+    
+    // Obtain reference to enum definition
+    if (property.$ref) {
+      enumRef = property.$ref;
+    } else if (property.anyOf) {
+      // Handle Optional[Enum] pattern
+      const refItem = property.anyOf.find((item: any) => item.$ref);
+      if (refItem) enumRef = refItem.$ref;
+    } else if (property.items?.$ref) {
+      // Handle List[Enum] pattern
+      enumRef = property.items.$ref;
+    }
+    
+    if (!enumRef) return null;
+    
+    // Extract the definition name from #/$defs/EnumName
+    const defName = enumRef.split('/').pop();
+    if (!defName) return null;
+    
+    const enumDef = schemaDefinition.schema.$defs[defName];
+    return enumDef?.enum || null;
+  };
+
   const Field = ({
     label,
     value,
     onChange,
-  }: { label: string; value?: string; onChange: (v: string) => void }) => {
+  }: { label: string; value?: string | string[]; onChange: (v: string) => void }) => {
     const multiline = isMultilineKey(label);
+    const enumOptions = getEnumOptions(label);
+    
+    // Handle array values (convert to display string)
+    const displayValue = Array.isArray(value) ? value.join(', ') : (value ?? '');
+    
     return (
       <div className="space-y-1">
         <label className="block text-[10px] font-semibold tracking-wide text-gray-600">
           {fmtKey(label)}
         </label>
-        {multiline ? (
+        {enumOptions ? (
+          <select
+            value={displayValue}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full rounded border border-gray-300 p-2 text-sm text-gray-800 focus:outline-none focus:ring-2 bg-white"
+            style={{ outlineColor: PRIMARY }}
+          >
+            <option value="">-- Select --</option>
+            {enumOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        ) : multiline ? (
           <textarea
-            value={value ?? ''}
+            value={displayValue}
             onChange={(e) => onChange(e.target.value)}
             rows={4}
             className="w-full rounded border border-gray-300 p-2 text-sm text-gray-800 focus:outline-none focus:ring-2"
@@ -83,7 +180,7 @@ export default function ResultsPage() {
         ) : (
           <input
             type="text"
-            value={value ?? ''}
+            value={displayValue}
             onChange={(e) => onChange(e.target.value)}
             className="w-full rounded border border-gray-300 p-2 text-sm text-gray-800 focus:outline-none focus:ring-2"
             style={{ outlineColor: PRIMARY }}
@@ -103,47 +200,38 @@ export default function ResultsPage() {
     </div>
   );
 
-  // Field order per schema (unchanged, just memo'd)
-  const ORDER: Partial<Record<SchemaType, string[]>> = useMemo(() => ({
-    [SchemaType.NETWORK]: [
-      'Name','Title','Company','Email','Phone','LinkedIn',
-      'Status','Country','State','City','Date','Date (Last Met)','Date (Last Contact)','Notes'
-    ],
-    [SchemaType.DEAL_FLOW]: [
-      'Company name','CEO/ Primary Contact','Email','Date Sourced','Revenue Run Rate',
-      'Financing Round','Evaluation','State','City','Referral Source','Name of Referral',
-      'Sourced By','DEI','Equity/ Debt','Files','Notes'
-    ],
-    [SchemaType.LP_MAIN_DASHBOARD]: [
-      'Name','Fund','Amount $','Email','Status','Country','State','City',
-      'Follow Up date','Upcoming Meeting','Last Reach Out','Sent Email?','Notes'
-    ],
-    [SchemaType.VC_FUND]: [
-      'Name','Stage','Date','Name of Contact','Title','Email','Phone',
-      'Country','State','Industry Focus','Check Size','LinkedIn','Notes'
-    ],
-  }), []);
-
-  const renderFlatObjectOrdered = (obj: Record<string, any>, order?: string[]) => {
-    const presentKeys = new Set(Object.keys(obj ?? {}));
-    const ordered = (order ?? []).filter(k => presentKeys.has(k));
-    const rest = Array.from(presentKeys).filter(k => !ordered.includes(k)).sort();
-    const finalKeys = [...ordered, ...rest];
-
+  const renderFields = () => {
+    if (!schemaDefinition) return null;
+    
+    // Get all field keys from extracted data
+    const fieldKeys = Object.keys(editedData ?? {});
+    
     return (
       <div className="grid gap-3 md:grid-cols-2">
-        {finalKeys.map((k) => (
-          <Field key={k} label={k} value={obj[k]} onChange={(v) => setField(k, v)} />
+        {fieldKeys.map((fieldKey) => (
+          <Field
+            key={fieldKey}
+            label={fieldKey}
+            value={editedData[fieldKey]}
+            onChange={(v) => setField(fieldKey, v)}
+          />
         ))}
       </div>
     );
   };
 
-  if (!state?.extractedData) {
-    return <div className="p-4 text-sm text-gray-600">Loading...</div>;
+  if (schemaLoading) {
+    return (
+      <div className="mx-auto max-w-3xl p-4">
+        <div className="text-sm text-gray-600">Loading schema...</div>
+      </div>
+    );
   }
 
-  const schemaType = state.schemaType;
+  if (!state?.extractedData || !schemaDefinition) {
+    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+    return <div className="p-4 text-sm text-gray-600">Loading...</div>;
+  }
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -151,7 +239,7 @@ export default function ResultsPage() {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/')}
+            onClick={handleBack}
             className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-800 hover:bg-gray-50"
           >
             ← Back
@@ -162,29 +250,9 @@ export default function ResultsPage() {
 
       {/* Editor */}
       <div className="space-y-6">
-        {schemaType === SchemaType.NETWORK && (
-          <SectionCard title="Network">
-            {renderFlatObjectOrdered(editedData as NetworkPayload, ORDER[SchemaType.NETWORK])}
-          </SectionCard>
-        )}
-
-        {schemaType === SchemaType.DEAL_FLOW && (
-          <SectionCard title="Deal Flow">
-            {renderFlatObjectOrdered(editedData as DealFlowPayload, ORDER[SchemaType.DEAL_FLOW])}
-          </SectionCard>
-        )}
-
-        {schemaType === SchemaType.LP_MAIN_DASHBOARD && (
-          <SectionCard title="LP Main Dashboard">
-            {renderFlatObjectOrdered(editedData as LPMainDashboardPayload, ORDER[SchemaType.LP_MAIN_DASHBOARD])}
-          </SectionCard>
-        )}
-
-        {schemaType === SchemaType.VC_FUND && (
-          <SectionCard title="VC Fund">
-            {renderFlatObjectOrdered(editedData as VCFundPayload, ORDER[SchemaType.VC_FUND])}
-          </SectionCard>
-        )}
+        <SectionCard title={schemaDefinition.display_name}>
+          {renderFields()}
+        </SectionCard>
       </div>
 
       {/* Actions */}
@@ -197,15 +265,14 @@ export default function ResultsPage() {
         >
           {isLoading ? 'Sending to Monday.com…' : 'Send to Monday.com'}
         </button>
-
-
       </div>
-        {error && (
-          <p className="w-full mt-3 px-3 py-2 rounded text-white text-xs bg-red-500 disabled:opacity-50 flex items-center justify-center gap-2">
-            <ExclamationTriangleIcon className="h-4 w-4 text-white" />
+      
+      {error && (
+        <p className="w-full mt-3 px-3 py-2 rounded text-white text-xs bg-red-500 disabled:opacity-50 flex items-center justify-center gap-2">
+          <ExclamationTriangleIcon className="h-4 w-4 text-white" />
           {error}
-          </p>
-        )}
+        </p>
+      )}
     </div>
   );
 }
