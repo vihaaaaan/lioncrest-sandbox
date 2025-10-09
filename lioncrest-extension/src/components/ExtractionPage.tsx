@@ -8,7 +8,6 @@ import google_icon from "../assets/google_icon.svg";
 import SchemaDropdown from "./SchemaDropdown";
 import { apiService } from "../api";
 import type { DataExtractionRequest, DataExtractionResponse } from "../types";
-import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 
 type Mode = "thread" | "manual";
 
@@ -30,10 +29,12 @@ export default function ExtractionPage() {
 
   const [isAuthenticatedGoogle, setIsAuthenticatedGoogle] = useState(false);
   const [authChecking, setAuthChecking] = useState(true);
+  const [invalidDomainEmail, setInvalidDomainEmail] = useState<string | null>(null);
 
   const [schema, setSchema] = useState<string>("");
   const [text, setText] = useState("");
   const [mode, setMode] = useState<Mode>(threadId ? "thread" : "manual");
+  const [ userSelectedMode, setUserSelectedMode ] = useState<boolean>(false);
 
   const [loadingExtraction, setExtractionLoading] = useState(false);
   const [loadingClear, setClearLoading] = useState(false);
@@ -43,13 +44,37 @@ export default function ExtractionPage() {
   const [preview, setPreview] = useState<ThreadPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // Update mode change handlers to set userSelectedMode flag
+  const switchToManual = () => {
+    setMode("manual");
+    setUserSelectedMode(true);
+  };
+
+  const switchToThread = () => {
+    setMode("thread");
+    setUserSelectedMode(true); 
+  };
+
+  useEffect(() => {
+    setUserSelectedMode(false);
+  }, [threadId]);
+
   // Check auth once on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await chrome.runtime.sendMessage({ type: "AUTH_STATUS" });
-        if (!cancelled) setIsAuthenticatedGoogle(Boolean(res?.signedIn));
+        if (!cancelled) {
+          if (res?.error === "invalid_domain") {
+            setIsAuthenticatedGoogle(false);
+            setInvalidDomainEmail(res?.email || null);
+            setError(`Account ${res?.email} is not authorized. Please sign in with a @lioncrest.vc or @prospeq.co account.`);
+          } else {
+            setIsAuthenticatedGoogle(Boolean(res?.signedIn));
+            setInvalidDomainEmail(null);
+          }
+        }
       } finally {
         if (!cancelled) setAuthChecking(false);
       }
@@ -59,18 +84,57 @@ export default function ExtractionPage() {
     };
   }, []);
 
+  // Re-validate auth when Gmail account changes (threadId or accountIndex changes)
+  useEffect(() => {
+    // Skip if we haven't done the initial auth check yet
+    if (authChecking) return;
+    
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await chrome.runtime.sendMessage({ type: "AUTH_STATUS" });
+        if (!cancelled) {
+          if (res?.error === "invalid_domain" || res?.error === "account_mismatch") {
+            setIsAuthenticatedGoogle(false);
+            setInvalidDomainEmail(res?.email || res?.gmailEmail || null);
+            if (res?.error === "account_mismatch") {
+              setError(res?.message || `Gmail account mismatch. Please switch Gmail accounts or re-authenticate.`);
+            } else {
+              setError(`Account ${res?.email} is not authorized. Please sign in with a @lioncrest.vc or @prospeq.co account.`);
+            }
+          } else if (res?.signedIn) {
+            // Clear error states when switching to a valid account
+            setIsAuthenticatedGoogle(true);
+            setInvalidDomainEmail(null);
+            setError(null);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to re-validate auth:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, accountIndex, authChecking]);
+
   // Keep mode synced to whether a thread is present
   useEffect(() => {
+    // Return early and dont apply mode change if the user has manually selected a mode
+    if (userSelectedMode) return;
     const shouldBeThreadMode = threadId ? "thread" : "manual";
     if (mode !== shouldBeThreadMode) {
       setMode(shouldBeThreadMode);
     }
-  }, [threadId, mode]);
+  }, [threadId, mode, userSelectedMode]);
 
   // Fetch Gmail preview when authenticated and a thread is available
   useEffect(() => {
     async function fetchPreview() {
-      if (!threadId || !isAuthenticatedGoogle) return;
+      if (!threadId || !isAuthenticatedGoogle) {
+        setPreview(null);
+        return;
+      }
       setPreviewLoading(true);
       setError(null);
       try {
@@ -78,12 +142,22 @@ export default function ExtractionPage() {
         const tokenRes = await chrome.runtime.sendMessage({ type: "GET_TOKEN" });
         if (!tokenRes?.success) {
           setPreview(null);
+          
+          // Handle invalid domain error
+          if (tokenRes?.error === "invalid_domain") {
+            setIsAuthenticatedGoogle(false);
+            setInvalidDomainEmail(tokenRes?.email || null);
+            setError(tokenRes?.message || `Account not authorized. Please sign in with a @lioncrest.vc or @prospeq.co account.`);
+          } else if (tokenRes?.error === "account_mismatch") {
+            setIsAuthenticatedGoogle(false);
+            setInvalidDomainEmail(tokenRes?.gmailEmail || null);
+            setError(tokenRes?.message || `Gmail account mismatch. Please switch Gmail accounts or re-authenticate.`);
+          } else {
+            setError("Authentication required");
+          }
           return;
         }
         const accessToken = tokenRes.accessToken as string;
-
-
-
 
         console.log("Got access token, fetching thread", threadId);
 
@@ -129,9 +203,11 @@ export default function ExtractionPage() {
 
   const handleAuthenticationGoogle = async () => {
     setError(null);
+    setInvalidDomainEmail(null);
     const res = await chrome.runtime.sendMessage({ type: "AUTH_START" });
     if (res?.success) {
       setIsAuthenticatedGoogle(true);
+      setInvalidDomainEmail(null);
       // If we have a thread, ensure we're in thread mode after auth
       if (threadId) {
         setMode("thread");
@@ -140,6 +216,13 @@ export default function ExtractionPage() {
       setIsAuthenticatedGoogle(false);
       setError(res?.error || "Authentication failed.");
     }
+  };
+
+  const handleSignOut = async () => {
+    setError(null);
+    setInvalidDomainEmail(null);
+    await chrome.runtime.sendMessage({ type: "SIGN_OUT" });
+    setIsAuthenticatedGoogle(false);
   };
 
   const handleExtract = async () => {
@@ -203,8 +286,32 @@ export default function ExtractionPage() {
   if (mode === "thread") {
     return (
       <div className="max-w-3xl mx-auto">
-        {/* Info box (thread detected) */}
-        {!isAuthenticatedGoogle && (
+        {/* Show invalid domain warning */}
+        {invalidDomainEmail && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded">
+            <div className="flex items-center">
+              <img src={warning_icon} alt="Warning icon" className="w-12 pr-4" />
+              <div>
+                <p className="font-bold text-red-900 text-xs">
+                  Unauthorized Account
+                </p>
+              </div>
+            </div>
+            <p className="text-red-900 text-xs mt-2">
+              You're signed in with <strong>{invalidDomainEmail}</strong>, which is not authorized. 
+              Please sign out and authenticate with a <strong>@lioncrest.vc</strong> or <strong>@prospeq.co</strong> account.
+            </p>
+            <button
+              onClick={handleSignOut}
+              className="w-full mt-3 px-3 py-2 rounded text-white text-xs bg-red-600 hover:bg-red-700 active:bg-red-800 transition-all duration-300 ease-in-out hover:scale-105 hover:shadow-lg active:scale-95"
+            >
+              Sign Out
+            </button>
+          </div>
+        )}
+
+        {/* Show auth prompt if not authenticated */}
+        {!isAuthenticatedGoogle && !invalidDomainEmail && (
           <div className="mb-4 p-4 bg-[#031F53] rounded">
             <div className="flex items-center">
               <img src={gmail_icon} alt="Gmail icon" className="w-12 pr-4" />
@@ -268,7 +375,7 @@ export default function ExtractionPage() {
           ) : (
             <div className="text-xs text-gray-500">
               Preview unavailable. You can still{" "}
-              <button className="underline" onClick={() => setMode("manual")}>
+              <button className="underline" onClick={switchToManual}>
                 switch to Manual mode
               </button>
               .
@@ -276,11 +383,18 @@ export default function ExtractionPage() {
           )}
         </div>
 
-        {/* Primary action */}
+        {/* Error display */}
+        {error && !invalidDomainEmail && (
+          <p className="w-full mb-3 px-3 py-2 rounded text-white text-xs bg-red-500">
+            {error}
+          </p>
+        )}
+
+        {/* Primary action - disabled if invalid domain */}
         <div className="mt-3">
           <button
             onClick={handleExtract}
-            disabled={loadingExtraction}
+            disabled={loadingExtraction || !!invalidDomainEmail}
             className="w-full px-3 py-2 rounded text-white text-sm bg-[#031F53] hover:opacity-90 active:opacity-80 disabled:opacity-50 transition-all duration-300 ease-in-out hover:scale-105 hover:shadow-lg active:scale-95"
           >
             {loadingExtraction ? "Extracting…" : "Extract from Thread"}
@@ -290,7 +404,7 @@ export default function ExtractionPage() {
         {/* Switch to manual */}
         <div className="mt-2 text-xs text-gray-600">
           Not the right thread?{" "}
-          <button className="underline" onClick={() => setMode("manual")}>
+          <button className="underline" onClick={switchToManual}>
             Use Manual text instead
           </button>
           .
@@ -333,7 +447,6 @@ export default function ExtractionPage() {
       {/* Error */}
       {error && (
         <p className="w-full mt-3 px-3 py-2 rounded text-white text-xs bg-red-500 disabled:opacity-50 flex items-center justify-center gap-2">
-          <ExclamationTriangleIcon className="h-4 w-4 text-white" />
           {error}
         </p>
       )}
@@ -362,7 +475,7 @@ export default function ExtractionPage() {
       {threadId && (
         <div className="mt-2 text-xs text-gray-600">
           A Gmail thread is open.{" "}
-          <button className="underline" onClick={() => setMode("thread")}>
+          <button className="underline" onClick={switchToThread}>
             Extract from Thread instead
           </button>
           .

@@ -45,6 +45,38 @@ async function getThreadIdFromDOM(tabId) {
   }
 }
 
+// Get the current Gmail account email from the page
+async function getCurrentGmailAccount(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        // Try to get email from profile button
+        const profileButton = document.querySelector('[aria-label*="Google Account"]');
+        if (profileButton) {
+          const ariaLabel = profileButton.getAttribute('aria-label');
+          const emailMatch = ariaLabel?.match(/[\w.-]+@[\w.-]+\.\w+/);
+          if (emailMatch) return emailMatch[0].toLowerCase();
+        }
+        
+        // Alternative: try to get from account switcher
+        const accountInfo = document.querySelector('[data-email]');
+        if (accountInfo) {
+          return accountInfo.getAttribute('data-email')?.toLowerCase();
+        }
+        
+        return null;
+      },
+    });
+    const email = results?.[0]?.result || null;
+    console.log("Current Gmail account:", email);
+    return email;
+  } catch (error) {
+    console.error("Failed to extract Gmail account:", error);
+    return null;
+  }
+}
+
 async function updateAndBroadcastContext(tabId, url) {
   const parsed = parseGmailContext(url);
   
@@ -53,19 +85,22 @@ async function updateAndBroadcastContext(tabId, url) {
   if (parsed.hasThread) {
     threadId = await getThreadIdFromDOM(tabId);
   }
-  
-  const newContext = {
-    threadId,
-    accountIndex: parsed.accountIndex,
-  };
-  
-  // Only broadcast if context actually changed
+
+  const newContext = { threadId, accountIndex: parsed.accountIndex };
+
+  // Only broadcast if context changed
   if (
     lastContext.threadId !== newContext.threadId ||
     lastContext.accountIndex !== newContext.accountIndex
   ) {
     lastContext = newContext;
-    chrome.runtime.sendMessage({ type: "THREAD_CHANGED", ...newContext }).catch(() => {});
+    console.log("Broadcasting context:", newContext);
+    
+    chrome.runtime.sendMessage({
+      type: "THREAD_CHANGED",
+      threadId: newContext.threadId,
+      accountIndex: newContext.accountIndex,
+    }).catch(() => {});
   }
 }
 
@@ -91,12 +126,23 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   }
 });
 
-// On tab activation broadcast current context
+// Listen to tab activation (user switches tabs)
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await chrome.tabs.get(tabId);
     if (tab.url && tab.url.includes("mail.google.com")) {
       await updateAndBroadcastContext(tabId, tab.url);
+    } else {
+      // Clear context when switching to non-Gmail tab
+      if (lastContext.threadId !== null) {
+        lastContext = { threadId: null, accountIndex: 0 };
+        console.log("Cleared context (non-Gmail tab)");
+        chrome.runtime.sendMessage({
+          type: "THREAD_CHANGED",
+          threadId: null,
+          accountIndex: 0,
+        }).catch(() => {});
+      }
     }
   } catch {}
 });
@@ -290,6 +336,35 @@ async function signOut() {
   return { ok: true };
 }
 
+// Helper to validate current auth domain
+async function validateAuthDomain(gmailEmail = null) {
+  const tok = await loadTokens();
+  if (!tok?.email) return { valid: false, reason: "not_authenticated" };
+  
+  const email = tok.email.toLowerCase();
+  const domain = email.split("@")[1];
+  
+  // Check if authenticated email domain is allowed
+  if (!ALLOWED_DOMAINS.includes(domain)) {
+    // Domain not allowed - clear tokens
+    await clearTokens();
+    return { valid: false, reason: "invalid_domain", email };
+  }
+  
+  // If gmailEmail is provided, check if it matches the authenticated email
+  if (gmailEmail && gmailEmail.toLowerCase() !== email) {
+    console.warn(`Gmail account mismatch: authenticated as ${email}, but Gmail shows ${gmailEmail}`);
+    return { 
+      valid: false, 
+      reason: "account_mismatch", 
+      email,
+      gmailEmail: gmailEmail.toLowerCase()
+    };
+  }
+  
+  return { valid: true, email };
+}
+
 // --- Message API for UI surfaces ---
 // (Coexists with your existing GET_CONTEXT listener above)
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -302,11 +377,57 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           return;
         }
         case "AUTH_STATUS": {
+          // Validate domain before returning status
+          const validation = await validateAuthDomain();
+          if (!validation.valid) {
+            sendResponse({ 
+              success: true, 
+              signedIn: false,
+              error: validation.reason === "invalid_domain" ? "invalid_domain" : undefined,
+              email: validation.email
+            });
+            return;
+          }
           const res = await getAuthStatus();
           sendResponse({ success: true, ...res });
           return;
         }
         case "GET_TOKEN": {
+          // Get the current active tab to check Gmail account
+          let gmailEmail = null;
+          try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab?.id && tab?.url?.includes("mail.google.com")) {
+              gmailEmail = await getCurrentGmailAccount(tab.id);
+            }
+          } catch (e) {
+            console.warn("Could not get current Gmail account:", e);
+          }
+          
+          // Validate domain and account match
+          const validation = await validateAuthDomain(gmailEmail);
+          if (!validation.valid) {
+            if (validation.reason === "invalid_domain") {
+              sendResponse({ 
+                success: false, 
+                error: "invalid_domain",
+                email: validation.email,
+                message: `Account ${validation.email} is not authorized. Please sign in with a @lioncrest.vc or @prospeq.co account.`
+              });
+            } else if (validation.reason === "account_mismatch") {
+              sendResponse({ 
+                success: false, 
+                error: "account_mismatch",
+                email: validation.email,
+                gmailEmail: validation.gmailEmail,
+                message: `You're authenticated as ${validation.email}, but currently viewing Gmail as ${validation.gmailEmail}. Please switch to the correct Gmail account or sign out and re-authenticate.`
+              });
+            } else {
+              sendResponse({ success: false, error: "not_authenticated" });
+            }
+            return;
+          }
+          
           const tok = await refreshIfNeeded();
           if (!tok) {
             sendResponse({ success: false, error: "not_authenticated" });
@@ -320,8 +441,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sendResponse({ success: true });
           return;
         }
+        case "GET_CONTEXT": {
+          sendResponse(lastContext);
+          return;
+        }
         default:
-          // Unhandled message type (your other listener handles GET_CONTEXT)
           return;
       }
     } catch (e) {
@@ -332,6 +456,5 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
   })();
 
-  // Keep the channel open for async responses
   return true;
 });
