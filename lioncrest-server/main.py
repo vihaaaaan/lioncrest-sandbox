@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from llm_utils.llm_utils import OpenAIClient
-from llm_utils.schemas import network, deal_flow, lp, vc_fund  # noqa: F401 (kept if used elsewhere)
 from llm_utils.data_extractor.extractor import SchemaType, DataExtractor
 
 # NEW: centralized logging
@@ -44,6 +43,10 @@ class DataExtractionResponse(BaseModel):
     message: Optional[str] = None
 
 
+class SchemaRequest(BaseModel):
+    schema_type: SchemaType
+
+
 # ------------------------------------------------------------------------------
 # FastAPI app
 # ------------------------------------------------------------------------------
@@ -67,6 +70,87 @@ app.add_middleware(
 async def root(request: Request):
     """Health check endpoint"""
     return {"message": "Lioncrest Data Extraction API is running"}
+
+
+@app.get("/schema_names")
+async def get_schemas(request: Request):
+    """
+    Get available schema types for data extraction.
+    Returns a list of all supported schema types.
+    """
+    req_extra = with_request_context(
+        request_id=getattr(request.state, "request_id", None),
+        method="GET",
+        path="/schema",
+    )
+    
+    logger.info("get-schemas called", extra=req_extra)
+    
+    # Return both schema value and display name for each schema type
+    schema_info = [
+        {
+            "value": schema.value,
+            "display_name": schema.display_name
+        }
+        for schema in SchemaType
+    ]
+    
+    logger.info(f"returning {len(schema_info)} schema types", extra=req_extra)
+    
+    return {
+        "schemas": schema_info,
+        "count": len(schema_info),
+        "success": True,}
+
+
+@app.get("/schema")
+async def get_schema_definition(request: Request, schema_type: SchemaType):
+    """
+    Get the JSON schema definition for a specific schema type.
+    Returns the complete schema structure with field definitions for the requested schema.
+    """
+    req_extra = with_request_context(
+        request_id=getattr(request.state, "request_id", None),
+        method="POST",
+        path="/schemas",
+    )
+    
+    logger.info(f"get-schema-definition called for {schema_type.value}", extra=req_extra)
+    
+    try:
+        # Get the Pydantic model for this schema type
+        model = extractor._data_model_for(schema_type)
+        # Get the JSON schema
+        json_schema = model.model_json_schema()
+        
+        schema_data = {
+            "schema_type": schema_type.value,
+            "display_name": schema_type.display_name,
+            "schema": json_schema,
+            "fields": {
+                field_name: {
+                    "alias": field_info.alias or field_name,
+                    "description": field_info.description or "",
+                    "type": str(field_info.annotation) if hasattr(field_info, 'annotation') else "unknown",
+                    "required": field_info.is_required() if hasattr(field_info, 'is_required') else False
+                }
+                for field_name, field_info in model.model_fields.items()
+            }
+        }
+        
+        logger.info(f"returning schema definition for {schema_type.value}", extra=req_extra)
+        
+        return {
+            "schema": schema_data,
+            "success": True,
+        }
+        
+    except Exception as e:
+        logger.warning(f"Failed to get schema for {schema_type.value}: {e}", extra=req_extra)
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Failed to load schema for {schema_type.value}: {str(e)}"
+        ) from e
 
 
 @app.post("/extract-data", response_model=DataExtractionResponse)

@@ -20,6 +20,17 @@ class SchemaType(str, Enum):
     DEAL_FLOW = "deal_flow"
     LP_MAIN_DASHBOARD = "lp_main_dashboard"
     VC_FUND = "vc_fund"
+    
+    @property
+    def display_name(self) -> str:
+        """Return user-friendly display name for the schema type."""
+        display_names = {
+            "network": "Network",
+            "deal_flow": "Deal Flow", 
+            "lp_main_dashboard": "LP Main Dashboard",
+            "vc_fund": "VC Fund"
+        }
+        return display_names.get(self.value, self.value.replace("_", " ").title())
 
 
 # Map schema types to Pydantic models
