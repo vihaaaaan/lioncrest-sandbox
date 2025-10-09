@@ -90,11 +90,6 @@ export default function ResultsPage() {
     try {
       // TODO: call your Monday API with { schemaType: state!.schemaType, data: editedData }
       await new Promise(res => setTimeout(res, 800));
-      // eslint-disable-next-line no-console
-      console.log('Sending to Monday.com:', {
-        schemaType: state!.schemaType,
-        data: editedData,
-      });
       alert('Data successfully sent to Monday.com!');
       navigate('/');
     } catch {

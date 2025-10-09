@@ -3,32 +3,30 @@
   "name": "Lioncrest Agent",
   "version": "1.0.0",
 
-  "permissions": ["sidePanel","activeTab","storage","identity","tabs","webNavigation"],
-  "host_permissions": ["https://mail.google.com/*","https://www.googleapis.com/*","http://localhost:8000/*"],
-
-  "side_panel": {
-    "default_path": "index.html"
-  },
-
-  "action": {
-    "default_title": "Open side panel"
-  },
-
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  },
+  "permissions": ["sidePanel", "activeTab", "storage", "identity", "tabs", "webNavigation", "scripting"],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://www.googleapis.com/*",
+    "https://accounts.google.com/*",
+    "https://oauth2.googleapis.com/*",
+    "https://openidconnect.googleapis.com/*",
+    "http://localhost:8000/*"
+  ],
 
   "oauth2": {
     "client_id": "958670873475-laumeefaj0f0mierca1tu0io8b23hov5.apps.googleusercontent.com",
     "scopes": [
-      "https://www.googleapis.com/auth/gmail.readonly",
+      "openid",
       "email",
-      "profile"
+      "profile",
+      "https://www.googleapis.com/auth/gmail.readonly"
     ]
   },
 
-  "icons": {
-    "128": "icons/lioncrest_ventures_logo.png"
-  }
+  "side_panel": { "default_path": "index.html" },
+  "action": { "default_title": "Open side panel" },
+
+  "background": { "service_worker": "background.js", "type": "module" },
+
+  "icons": { "128": "icons/lioncrest_ventures_logo.png" }
 }
