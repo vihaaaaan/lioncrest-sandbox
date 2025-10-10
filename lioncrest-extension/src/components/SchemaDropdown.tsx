@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiService } from '../api';
+import { apiService } from '../utils/api';
 import type { SchemaInfo } from '../types';
 
 type Props = {

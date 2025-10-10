@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { apiService } from '../api';
+import { apiService } from '../utils/api';
 import type { ExtractedData } from '../types';
 import { ExclamationTriangleIcon } from '@heroicons/react/16/solid';
 

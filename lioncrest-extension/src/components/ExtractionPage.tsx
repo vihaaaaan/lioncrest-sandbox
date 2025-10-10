@@ -6,18 +6,37 @@ import warning_icon from "../assets/warning_icon.svg";
 import gmail_icon from "../assets/gmail_icon.svg";
 import google_icon from "../assets/google_icon.svg";
 import SchemaDropdown from "./SchemaDropdown";
-import { apiService } from "../api";
+import { apiService } from "../utils/api";
 import type { DataExtractionRequest, DataExtractionResponse } from "../types";
+import { decodeMessageContent } from "../utils/decoding";
 
 type Mode = "thread" | "manual";
 
 type ThreadPreview = {
+
   subject?: string;
-  from?: string;
-  date?: string;     // display-ready string
-  snippet?: string;  // short body preview
+
+  // thread starter
+  startedBy?: { name: string; email: string };
+  startedAt?: string; // display-ready
+
+  // latest message
+  latestFrom?: { name: string; email: string };
+  latestAt?: string;  // display-ready
+  latestSnippet?: string; // short body preview
 };
 
+interface ThreadData {
+  messages: {
+    messageNumber: number;
+    subject: string; 
+    from: string;
+    to: string;
+    cc?: string;
+    date: string;
+    content: string;
+  }[];
+}
 function headerValue(headers: Array<{ name: string; value: string }>, name: string) {
   const h = headers?.find((x) => x.name?.toLowerCase() === name.toLowerCase());
   return h?.value ?? "";
@@ -43,6 +62,8 @@ export default function ExtractionPage() {
   // Email preview state
   const [preview, setPreview] = useState<ThreadPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  const [ threadData, setThreadData ] = useState<ThreadData | null>(null);
 
   // Update mode change handlers to set userSelectedMode flag
   const switchToManual = () => {
@@ -167,28 +188,51 @@ export default function ExtractionPage() {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
 
+
         if (!resp.ok) {
           const info = await resp.text();
           throw new Error(`Gmail error: ${resp.status} ${info}`);
         }
 
         const data = await resp.json();
+
         console.log("Gmail thread data:", data);
         const messages = (data?.messages ?? []) as Array<any>;
-        
         if (messages.length === 0) {
           throw new Error("No messages found in thread");
         }
+        // Initialize and set full thread data
+        const threadData = {
+          messages: messages.map((msg: any, index) => {
+            const headers = msg?.payload?.headers ?? [];
+            const content = decodeMessageContent(msg?.payload ?? {});
+            return {
+              messageNumber: index + 1,
+              subject: headerValue(headers, "Subject"),
+              from: headerValue(headers, "From"),
+              to: headerValue(headers, "To"),
+              cc: headerValue(headers, "Cc"),
+              date: headerValue(headers, "Date"),
+              content: content,
+            };
+          }),
+        };
 
-        // Get the last message in the thread
+        setThreadData(threadData);
+
+        // Initialize and set preview data
         const lastMsg = messages[messages.length - 1];
-        const headers = lastMsg?.payload?.headers ?? [];
+        const firstMsg = messages[0];
+        const lastMsgHeaders = lastMsg?.payload?.headers ?? [];
+        const firstMsgHeaders = firstMsg?.payload?.headers ?? [];
 
         setPreview({
-          subject: headerValue(headers, "Subject"),
-          from: headerValue(headers, "From"),
-          date: headerValue(headers, "Date"),
-          snippet: lastMsg?.snippet ?? data?.snippet ?? "",
+          subject: headerValue(lastMsgHeaders, "Subject"),
+          startedBy: {name: grabName(headerValue(firstMsgHeaders, "From")), email: grabEmail(headerValue(firstMsgHeaders, "From"))},
+          startedAt: formatEmailDate(headerValue(firstMsgHeaders, "Date")),
+          latestFrom: {name: grabName(headerValue(lastMsgHeaders, "From")), email: grabEmail(headerValue(firstMsgHeaders, "From"))},
+          latestAt: formatEmailDate(headerValue(lastMsgHeaders, "Date")),
+          latestSnippet: lastMsg?.snippet ?? data?.snippet ?? "",
         });
       } catch (e) {
         console.error("Failed to fetch email preview:", e);
@@ -234,20 +278,11 @@ export default function ExtractionPage() {
 
       // In thread mode you’ll likely want the **full email body** later.
       // For now we send either the manual text or the preview snippet as a fallback.
-      const payloadText =
-        mode === "manual" ? text.trim() : (preview?.snippet ?? "").trim();
-
-      if (!payloadText) {
-        throw new Error(
-          mode === "manual"
-            ? "Please paste some text to extract."
-            : "Email preview not available yet. Switch to Manual mode or wire full-body fetch."
-        );
-      }
+      
 
       const req: DataExtractionRequest = {
         schema_type: schema,
-        text: payloadText,
+        text: JSON.stringify(threadData, null, 2),
       };
 
       const resp: DataExtractionResponse = await apiService.extractData(req);
@@ -257,7 +292,7 @@ export default function ExtractionPage() {
         state: {
           extractedData: resp.extracted_data,
           schemaType: resp.schema_type,
-          originalText: payloadText,
+          originalText: JSON.stringify(threadData, null, 2),
         },
       });
     } catch (e: any) {
@@ -273,6 +308,45 @@ export default function ExtractionPage() {
     setSchema("");
     setClearLoading(false);
   };
+
+  const grabName = (fromString: string) => {
+    const match = fromString.match(/^(.*?)\s*<.*?>$/);
+    return match ? match[1] : "";
+  };
+
+  const grabEmail = (fromString: string) => {
+    const match = fromString.match(/<(.+?)>/);
+    return match ? match[1] : "";
+  };
+
+  const formatEmailDate = (rawDate: string): string => {
+    const date = new Date(rawDate);
+    if (isNaN(date.getTime())) return "Invalid Date";
+
+    const now = new Date();
+    const isToday =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+
+    if (isToday) {
+      // Only time if today
+      return date.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } else {
+      // Date + time if not today
+      return date.toLocaleString(undefined, {
+        month: "short",   // "Oct"
+        day: "numeric",   // "4"
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+  };
+
+
 
   // Optional: block UI while we check auth the first time
   if (authChecking) {
@@ -339,38 +413,75 @@ export default function ExtractionPage() {
           <SchemaDropdown value={schema} onChange={setSchema} />
         </div>
 
-        {/* Email preview card */}
+        {/* Email Thread Preview */}
         <div className="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-xs font-bold text-[#031F53]">Email Preview</h3>
           {previewLoading ? (
-            <div className="text-xs text-gray-500">Loading preview…</div>
+            <div className="flex items-center justify-center gap-2">
+              <div className="h-4 w-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+              <div className="text-xs text-gray-500">Loading email preview…</div>
+            </div>
           ) : preview ? (
-            <div className="space-y-2 text-sm">
-              <div className="flex flex-wrap gap-3 text-gray-700">
-                {preview.subject && (
-                  <div>
-                    <span className="text-xs font-semibold text-gray-500">Subject:</span>{" "}
-                    <span>{preview.subject}</span>
+            <div className="space-y-4">
+              {/* Subject */}
+              {preview.subject && (
+                <h3 className="text-base font-semibold text-gray-900">
+                  {preview.subject}
+                </h3>
+              )}
+
+              {/* Thread Overview */}
+              <div className="space-y-2">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Thread Overview
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-sm text-gray-600">Started by</span>
+                    {preview.startedBy && (
+                      <span className="text-sm font-medium text-gray-800">
+                        {preview.startedBy.name}{" "}
+                        <span className="text-gray-500">&lt;{preview.startedBy.email}&gt;</span>
+                      </span>
+                    )}
                   </div>
-                )}
-                {preview.from && (
-                  <div>
-                    <span className="text-xs font-semibold text-gray-500">From:</span>{" "}
-                    <span>{preview.from}</span>
+                  {preview.startedAt && (
+                    <span className="shrink-0 text-xs text-gray-500">
+                      {preview.startedAt}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="h-px bg-gray-100" />
+
+              {/* Latest Message */}
+              <div className="space-y-2">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Latest Message
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-sm text-gray-600">From</span>
+                    {preview.latestFrom && (
+                      <span className="text-sm font-medium text-gray-800">
+                        {preview.latestFrom.name}{" "}
+                        <span className="text-gray-500">&lt;{preview.latestFrom.email}&gt;</span>
+                      </span>
+                    )}
                   </div>
-                )}
-                {preview.date && (
-                  <div>
-                    <span className="text-xs font-semibold text-gray-500">Date:</span>{" "}
-                    <span>{preview.date}</span>
+                  {preview.latestAt && (
+                    <span className="shrink-0 text-xs text-gray-500">
+                      {preview.latestAt}
+                    </span>
+                  )}
+                </div>
+
+                {preview.latestSnippet && (
+                  <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700">
+                    {preview.latestSnippet}
                   </div>
                 )}
               </div>
-              {preview.snippet && (
-                <div className="rounded bg-gray-50 p-3 text-xs text-gray-700">
-                  {preview.snippet}
-                </div>
-              )}
             </div>
           ) : (
             <div className="text-xs text-gray-500">
@@ -382,6 +493,8 @@ export default function ExtractionPage() {
             </div>
           )}
         </div>
+
+
 
         {/* Error display */}
         {error && !invalidDomainEmail && (
