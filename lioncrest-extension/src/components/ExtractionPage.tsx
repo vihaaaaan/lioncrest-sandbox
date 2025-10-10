@@ -52,7 +52,7 @@ export default function ExtractionPage() {
 
   const [schema, setSchema] = useState<string>("");
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<Mode>(threadId ? "thread" : "manual");
+  const [mode, setMode] = useState<Mode>("manual"); // Start with manual, let effect update it
   const [ userSelectedMode, setUserSelectedMode ] = useState<boolean>(false);
 
   const [loadingExtraction, setExtractionLoading] = useState(false);
@@ -152,6 +152,7 @@ export default function ExtractionPage() {
   // Fetch Gmail preview when authenticated and a thread is available
   useEffect(() => {
     async function fetchPreview() {
+      console.log("ThreadId or auth changed, fetching preview", { threadId, isAuthenticatedGoogle });
       if (!threadId || !isAuthenticatedGoogle) {
         setPreview(null);
         return;
@@ -423,6 +424,9 @@ export default function ExtractionPage() {
           ) : preview ? (
             <div className="space-y-4">
               {/* Subject */}
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Thread Overview
+                </div>
               {preview.subject && (
                 <h3 className="text-base font-semibold text-gray-900">
                   {preview.subject}
@@ -431,16 +435,13 @@ export default function ExtractionPage() {
 
               {/* Thread Overview */}
               <div className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Thread Overview
-                </div>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-col">
-                    <span className="text-sm text-gray-600">Started by</span>
+                    <span className="text-xs text-gray-600">Started by</span>
                     {preview.startedBy && (
-                      <span className="text-sm font-medium text-gray-800">
+                      <span className="text-xs font-medium text-gray-800">
                         {preview.startedBy.name}{" "}
-                        <span className="text-gray-500">&lt;{preview.startedBy.email}&gt;</span>
+                        <span className="text-gray-500 text-xs">&lt;{preview.startedBy.email}&gt;</span>
                       </span>
                     )}
                   </div>
@@ -461,11 +462,11 @@ export default function ExtractionPage() {
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-col">
-                    <span className="text-sm text-gray-600">From</span>
+                    <span className="text-xs text-gray-600">From</span>
                     {preview.latestFrom && (
-                      <span className="text-sm font-medium text-gray-800">
+                      <span className="text-xs font-medium text-gray-800">
                         {preview.latestFrom.name}{" "}
-                        <span className="text-gray-500">&lt;{preview.latestFrom.email}&gt;</span>
+                        <span className="text-gray-500 text-xs">&lt;{preview.latestFrom.email}&gt;</span>
                       </span>
                     )}
                   </div>
@@ -478,7 +479,7 @@ export default function ExtractionPage() {
 
                 {preview.latestSnippet && (
                   <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700">
-                    {preview.latestSnippet}
+                    {preview.latestSnippet}...
                   </div>
                 )}
               </div>
