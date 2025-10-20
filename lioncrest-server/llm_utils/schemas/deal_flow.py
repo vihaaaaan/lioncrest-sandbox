@@ -45,7 +45,7 @@ class EquityDebtType(StrEnum):
 class DealFlow(BaseModel):
     name: Optional[str] = Field(
         None, 
-        alias="Company name", 
+        alias="Name", 
         description="Full legal name of the company being evaluated"
     )
     ceo_primary_contact: Optional[str] = Field(

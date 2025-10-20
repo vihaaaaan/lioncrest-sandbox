@@ -4,7 +4,7 @@ const API_BASE_URL = 'http://localhost:8000';
 
 export const apiService = {
   async extractData(request: DataExtractionRequest): Promise<DataExtractionResponse> {
-    const response = await fetch(`${API_BASE_URL}/extract-data`, {
+    const response = await fetch(`${API_BASE_URL}/update-data`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -51,6 +51,27 @@ export const apiService = {
     
     if (!response.ok) {
       throw new Error(`Health check failed: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  async upsertToMonday(schemaType: string, columnData: Record<string, any>, lookupKey?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/monday-com/upsert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        schema_type: schemaType,
+        column_data: columnData,
+        lookup_key: lookupKey,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Failed to save to Monday.com: ${response.status}`);
     }
 
     return response.json();

@@ -277,13 +277,23 @@ export default function ExtractionPage() {
 
       if (!schema) throw new Error("Please select a schema.");
 
-      // In thread mode you’ll likely want the **full email body** later.
-      // For now we send either the manual text or the preview snippet as a fallback.
-      
+      // Determine what text to send based on mode
+      let textToSend: string;
+      if (mode === "thread") {
+        if (!threadData) {
+          throw new Error("No thread data available. Please wait for the email to load.");
+        }
+        textToSend = JSON.stringify(threadData, null, 2);
+      } else {
+        if (!text.trim()) {
+          throw new Error("Please enter some text to extract.");
+        }
+        textToSend = text;
+      }
 
       const req: DataExtractionRequest = {
         schema_type: schema,
-        text: JSON.stringify(threadData, null, 2),
+        text: textToSend,
       };
 
       const resp: DataExtractionResponse = await apiService.extractData(req);
@@ -293,7 +303,9 @@ export default function ExtractionPage() {
         state: {
           extractedData: resp.extracted_data,
           schemaType: resp.schema_type,
-          originalText: JSON.stringify(threadData, null, 2),
+          originalText: textToSend,
+          isUpdate: resp.is_update,
+          changeMetadata: resp.change_metadata,
         },
       });
     } catch (e: any) {
@@ -508,7 +520,7 @@ export default function ExtractionPage() {
         <div className="mt-3">
           <button
             onClick={handleExtract}
-            disabled={loadingExtraction || !!invalidDomainEmail}
+            disabled={loadingExtraction || !!invalidDomainEmail || !threadData || previewLoading}
             className="w-full px-3 py-2 rounded text-white text-sm bg-[#031F53] hover:opacity-90 active:opacity-80 disabled:opacity-50 transition-all duration-300 ease-in-out hover:scale-105 hover:shadow-lg active:scale-95"
           >
             {loadingExtraction ? "Extracting…" : "Extract from Thread"}

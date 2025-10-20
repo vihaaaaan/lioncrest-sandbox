@@ -23,6 +23,22 @@ export interface DataExtractionResponse {
   extracted_data: Record<string, any>;
   success: boolean;
   message?: string;
+  is_update?: boolean;
+  change_metadata?: {
+    updated_fields: string[];
+    added_fields: string[];
+    unchanged_fields: string[];
+    changes: Record<string, { old: any; new: any }>;
+    total_changes: number;
+  };
+}
+
+export interface MondayUpsertResponse {
+  monday_item_id: string;
+  monday_item_name: string;
+  was_created: boolean;
+  success: boolean;
+  message?: string;
 }
 
 // --- Basic structures mirroring Pydantic alias keys exactly ---
