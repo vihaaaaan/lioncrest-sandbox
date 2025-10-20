@@ -78,12 +78,27 @@ export default function ResultsPage() {
     loadSchema();
   }, [state?.schemaType, navigate]);
 
+  // Initialize editedData only once when component mounts
   useEffect(() => {
     if (!state?.extractedData) {
       navigate('/');
       return;
     }
-    setEditedData(state.extractedData);
+    // Set initial data only if we haven't set it yet (check if editedData is empty)
+    setEditedData(prev => {
+      // Only set if we don't have any data yet
+      if (Object.keys(prev).length === 0) {
+        return state.extractedData;
+      }
+      return prev;
+    });
+  }, [state?.extractedData, navigate]);
+
+  // Separate effect to handle navigation if state becomes invalid
+  useEffect(() => {
+    if (!state || !state.extractedData) {
+      navigate('/');
+    }
   }, [state, navigate]);
 
   const setField = (key: string, value: string) => {
